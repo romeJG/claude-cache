@@ -62,8 +62,10 @@ struct CacheMenu: View {
     /// Taller than this and the content scrolls (the menu can't be taller than the screen).
     var maxHeight: CGFloat = 800
     // Which sections are open, remembered between launches.
-    @AppStorage("open.limits") var openLimits = true
-    @AppStorage("open.today") var openToday = true
+    // The account-wide strips start as one line each, so the conversation leads
+    // (new keys: the old ones remembered "open" from when that was the default).
+    @AppStorage("open.limits.v2") var openLimits = false
+    @AppStorage("open.today.v2") var openToday = false
     @AppStorage("open.context") var openContext = true
     @AppStorage("open.messages") var openMessages = false
     @AppStorage("open.biggest") var openBiggest = false
@@ -94,24 +96,35 @@ struct CacheMenu: View {
             } else if store.conversations.isEmpty {
                 Text("No conversations with replies yet").font(.callout).foregroundStyle(ink.secondary)
             }
-            if let limits = store.limits {
-                LimitsStrip(limits: limits, now: now, ink: ink, expanded: $openLimits)
-            }
-            if let today = store.today {
-                TodayStrip(today: today, tips: store.dayTips, ink: ink, expanded: $openToday)
-            }
+            // The inspected conversation leads, as one panel: its cache, what to do
+            // about it, and what its context is made of.
             if let focus = store.focus {
+                let state = CacheState(left: focus.secondsLeft(at: now))
                 VStack(alignment: .leading, spacing: 10) {
-                    Card(conversation: focus, now: now, ink: ink)
+                    Card(conversation: focus, now: now, ink: ink, framed: false)
                         .id(focus.id)
                         .transition(.opacity)
                     Toolbar(store: store, conversation: focus, now: now, ink: ink)
+                    if focus.context != nil || !(focus.tips ?? []).isEmpty {
+                        Rectangle().fill(ink.track).frame(height: 1)
+                    }
                     if let context = focus.context {
                         ContextPanel(context: context, ink: ink, expanded: $openContext, messagesOpen: $openMessages)
                         if !context.top.isEmpty { BiggestItems(items: context.top, ink: ink, expanded: $openBiggest) }
                     }
                     if let tips = focus.tips, !tips.isEmpty { Tips(tips: tips, ink: ink, expanded: $openTips) }
                 }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(ink.surface))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(state == .cold ? Color.clear : ink.tint(state), lineWidth: 1.5)
+                    .pulse(state == .low))
+            }
+            if let limits = store.limits {
+                LimitsStrip(limits: limits, now: now, ink: ink, expanded: $openLimits)
+            }
+            if let today = store.today {
+                TodayStrip(today: today, tips: store.dayTips, ink: ink, expanded: $openToday)
             }
             if store.conversations.count > 1 {
                 VStack(alignment: .leading, spacing: 2) {
@@ -593,7 +606,9 @@ struct ActionButton: View {
         .foregroundStyle(emphasis ? ink.panel : ink.primary)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(Capsule().fill(emphasis ? ink.tint(.hot) : ink.surface))
+        // It sits on a surface panel: sunk into the panel colour, with an outline.
+        .background(Capsule().fill(emphasis ? ink.tint(.hot) : ink.panel))
+        .overlay(Capsule().strokeBorder(emphasis ? Color.clear : ink.track))
         .opacity(enabled ? 1 : 0.45)
         .contentShape(Capsule())
         .onTapGesture { if enabled { action() } }
@@ -666,10 +681,27 @@ struct Card: View {
     let conversation: Conversation
     let now: Date
     let ink: Ink
+    /// false: no box of its own, for when it heads a panel that draws one.
+    var framed = true
 
     var body: some View {
         let left = conversation.secondsLeft(at: now)
         let state = CacheState(left: left)
+        if !framed {
+            face(left: left, state: state)
+        } else if state == .cold {
+            face(left: left, state: state)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 8).fill(ink.surface))
+        } else {
+            face(left: left, state: state)
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(ink.surface))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ink.tint(state), lineWidth: 1.5).pulse(state == .low))
+        }
+    }
+
+    @ViewBuilder func face(left: Double, state: CacheState) -> some View {
         if state == .cold {
             // Nothing to act on: a compact row, so the warm ones stand out.
             HStack(spacing: 10) {
@@ -684,9 +716,7 @@ struct Card: View {
                         .lineLimit(1)
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8).fill(ink.surface))
         } else {
             HStack(alignment: .center, spacing: 12) {
                 Ring(fraction: max(0, left) / conversation.ttl, state: state, left: left, size: 50, ink: ink)
@@ -705,9 +735,6 @@ struct Card: View {
                         .lineLimit(1)
                 }
             }
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: 10).fill(ink.surface))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ink.tint(state), lineWidth: 1.5).pulse(state == .low))
         }
     }
 

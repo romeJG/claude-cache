@@ -36,11 +36,11 @@ let prefix = args[2]
 let pick = args.count > 3 ? Int(args[3]) ?? 0 : 0
 let collapsed = args.contains("--collapsed")
 
-for key in ["today", "context", "messages", "biggest", "tips", "recent"] {
+for key in ["limits.v2", "today.v2", "context", "messages", "biggest", "tips", "recent"] {
     UserDefaults.standard.removeObject(forKey: "open." + key)
 }
 if collapsed {
-    for key in ["today", "context", "biggest", "tips", "recent"] { UserDefaults.standard.set(false, forKey: "open." + key) }
+    for key in ["context", "biggest", "tips", "recent"] { UserDefaults.standard.set(false, forKey: "open." + key) }
 } else {
     UserDefaults.standard.set(true, forKey: "open.messages")
 }
