@@ -13,8 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var scanning = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem.button?.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-
         let screen = NSScreen.main?.visibleFrame.height ?? 900
         hosting = NSHostingView(rootView: CacheMenu(store: store, maxHeight: screen - 140))
         resizeMenu = { [weak self] in self?.sizeMenu() }
@@ -119,18 +117,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func renderTitle() {
         guard let button = statusItem.button else { return }
-        let status = StatusTitle(conversations: store.conversations, limits: store.limits, jobs: store.jobs, now: Date())
-        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let title = NSMutableAttributedString(string: status.cache, attributes: [.font: font])
-        if let limit = status.limit {
-            title.append(NSAttributedString(string: " · ", attributes: [.font: font]))
-            var attributes: [NSAttributedString.Key: Any] = [.font: font]
-            if status.alarm { attributes[.foregroundColor] = NSColor.systemRed }
-            title.append(NSAttributedString(string: limit, attributes: attributes))
-        }
-        button.attributedTitle = title
-        button.appearsDisabled = status.quiet
+        let status = StatusTitle(conversations: store.conversations, selected: store.selected, limits: store.limits, jobs: store.jobs, now: Date())
+        button.title = ""
+        button.image = status.image(height: NSStatusBar.system.thickness - 2)
+        button.imagePosition = .imageOnly
         button.toolTip = status.tooltip
+        button.setAccessibilityLabel(status.spoken)
     }
 
     @objc func refreshNow() { scan() }

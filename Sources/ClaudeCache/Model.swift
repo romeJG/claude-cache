@@ -91,52 +91,51 @@ let watcher = Bundle.main.path(forResource: "claude_cache_watch", ofType: "py")
 enum CacheState {
     case hot, low, cold
     init(left: Double) { self = left <= 0 ? .cold : left < warnSeconds ? .low : .hot }
-    var emoji: String { switch self { case .hot: "🔥"; case .low: "⏳"; case .cold: "🧊" } }
+    var emoji: String { switch self { case .hot: "🔥"; case .low: "⏳"; case .cold: "🥶" } }
 }
 
-/// What the menu bar says: only what wants attention, so it can be ignored when quiet.
-///   the cache  — the warm conversation closest to going cold ("🔥 58m", "⏳ 4m"),
-///                "⟳" while one compacts, "🧊" when none is warm
-///   the limits — the fullest usage window, from 60% ("5h 72%"), alarming from 85%
-/// Nothing warm and limits fine: just a dimmed 🧊.
+/// What the menu bar shows, worked out from the scan; StatusIcon draws it.
+///   the cache — the conversation picked in the menu, or else the warm one closest
+///               to going cold, as a symbol and its minutes left; a spinner symbol
+///               while one compacts; dim when it's (or they're all) cold
+///   the usage — the 5-hour and weekly limits, always, as two small labelled gauges
 struct StatusTitle {
-    var cache: String
-    var limit: String? = nil
-    var alarm = false       // the limit is nearly used up
-    var quiet = false       // nothing to act on
+    enum Cache: Equatable { case warm(minutes: Int, low: Bool), compacting, cold }
+    var cache: Cache
+    var session: Double?   // 5-hour limit, % used
+    var week: Double?      // all-models week, % used
     var tooltip = ""
 
-    static let limitShown = 60.0
-    static let limitAlarm = 85.0
+    static let usageWarn = 60.0
+    static let usageAlarm = 85.0
 
-    init(conversations: [Conversation], limits: Limits?, jobs: [String: Job], now: Date) {
+    init(conversations: [Conversation], selected: String? = nil, limits: Limits?, jobs: [String: Job], now: Date) {
         let warm = conversations
             .map { ($0, $0.secondsLeft(at: now)) }
             .filter { $0.1 > 0 }
             .sorted { $0.1 < $1.1 }
         let time = { (d: Double) in Date(timeIntervalSince1970: d).formatted(date: .omitted, time: .shortened) }
 
-        if jobs.values.contains(.running) {
-            cache = "⟳"
-        } else if let (_, left) = warm.first {
-            cache = "\(CacheState(left: left).emoji) \(Int(ceil(left / 60)))m"
-        } else {
-            cache = CacheState.cold.emoji
-        }
+        let picked = conversations.first { $0.id == selected }
+        let followed = picked.map { ($0, $0.secondsLeft(at: now)) } ?? warm.first
 
-        let fullest = (limits?.windows ?? []).max { $0.used < $1.used }
-        if let fullest, fullest.used >= Self.limitShown {
-            let name = fullest.key == "five_hour" ? "5h" : fullest.key.hasSuffix("opus") ? "Opus" : "week"
-            limit = "\(name) \(Int(fullest.used.rounded()))%"
-            alarm = fullest.used >= Self.limitAlarm
+        if jobs.values.contains(.running) {
+            cache = .compacting
+        } else if let (_, left) = followed, left > 0 {
+            cache = .warm(minutes: Int(ceil(left / 60)), low: CacheState(left: left) == .low)
+        } else {
+            cache = .cold
         }
-        quiet = warm.isEmpty && limit == nil && cache == CacheState.cold.emoji
+        let windows = limits?.windows ?? []
+        session = windows.first { $0.key == "five_hour" }?.used
+        week = windows.first { $0.key == "seven_day" }?.used
 
         var lines = warm.map { c, left in
             "\(CacheState(left: left).emoji) \(c.title) — warm until \(time(c.when + c.ttl))"
         }
         if lines.isEmpty { lines.append("No conversation's cache is warm") }
-        for w in limits?.windows ?? [] {
+        if let picked { lines.insert("Showing: \(picked.title)", at: 0) }
+        for w in windows {
             lines.append("\(w.label): \(Int(w.used.rounded()))% used" + (w.resets.map { ", resets \(time($0))" } ?? ""))
         }
         tooltip = lines.joined(separator: "\n")
@@ -205,8 +204,11 @@ final class Store: ObservableObject {
     @Published var dayTips: [String] = []
     @Published var error: String?
     @Published var lastScan: Date?
-    /// The conversation shown in full; the latest one unless you picked another.
-    @Published var selected: String?
+    /// The conversation shown in full, and followed in the menu bar; the latest one
+    /// unless you picked another. Remembered between launches.
+    @Published var selected = UserDefaults.standard.string(forKey: "selected") {
+        didSet { UserDefaults.standard.set(selected, forKey: "selected") }
+    }
     /// How far the bars have grown in since the menu opened, 0 → 1. Set by the app
     /// delegate (a view inside a closed menu doesn't update, so it can't reset itself).
     @Published var reveal: CGFloat = 1
