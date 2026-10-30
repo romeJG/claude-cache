@@ -1,0 +1,482 @@
+{
+ "conversations": [
+  {
+   "id": "demo-1",
+   "title": "Add dark mode to the settings page",
+   "project": "my-web-app",
+   "when": -140,
+   "ttl": 3600,
+   "cached": 141200,
+   "replies": [
+    -3400,
+    -3100,
+    -2900,
+    -2300,
+    -2200,
+    -1700,
+    -1500,
+    -1100,
+    -800,
+    -600,
+    -450,
+    -300,
+    -140
+   ],
+   "context": {
+    "used": 148600,
+    "window": 1000000,
+    "autocompact": 33000,
+    "exact": true,
+    "parts": [
+     {
+      "key": "system",
+      "label": "System prompt",
+      "tokens": 9600
+     },
+     {
+      "key": "tools",
+      "label": "System tools",
+      "tokens": 17900
+     },
+     {
+      "key": "mcp",
+      "label": "MCP tools",
+      "tokens": 10700
+     },
+     {
+      "key": "memory",
+      "label": "Memory files",
+      "tokens": 6200
+     },
+     {
+      "key": "skills",
+      "label": "Skills",
+      "tokens": 9900
+     },
+     {
+      "key": "messages",
+      "label": "Messages",
+      "tokens": 96300
+     }
+    ],
+    "messages": [
+     {
+      "key": "notices",
+      "label": "Reminders & other",
+      "tokens": 38000
+     },
+     {
+      "key": "calls",
+      "label": "Tool calls",
+      "tokens": 21000
+     },
+     {
+      "key": "results",
+      "label": "Tool results",
+      "tokens": 17500
+     },
+     {
+      "key": "thinking",
+      "label": "Thinking",
+      "tokens": 12100
+     },
+     {
+      "key": "you",
+      "label": "Your messages",
+      "tokens": 3900
+     },
+     {
+      "key": "images",
+      "label": "Images & screenshots",
+      "tokens": 3100
+     },
+     {
+      "key": "replies",
+      "label": "Claude's replies",
+      "tokens": 700
+     }
+    ],
+    "groups": [
+     {
+      "label": "File reads",
+      "tokens": 9800
+     },
+     {
+      "label": "Shell output",
+      "tokens": 6100
+     }
+    ],
+    "top": [
+     {
+      "label": "Read \u00b7 SettingsPage.tsx",
+      "tokens": 6400
+     },
+     {
+      "label": "Bash \u00b7 Run the test suite",
+      "tokens": 4100
+     },
+     {
+      "label": "Screenshot (image)",
+      "tokens": 3100
+     },
+     {
+      "label": "Skill loaded \u00b7 frontend-design",
+      "tokens": 2900
+     }
+    ]
+   },
+   "tips": [
+    "148.6k goes with every message. Starting fresh for an unrelated task resets it to the baseline.",
+    "MCP tools cost 10.7k on every request. Turn off servers this project doesn't use."
+   ]
+  },
+  {
+   "id": "demo-2",
+   "title": "Why is the CSV import slow?",
+   "project": "data-tools",
+   "when": -2700,
+   "ttl": 3600,
+   "cached": 88000,
+   "replies": [
+    -3500,
+    -3300,
+    -3000,
+    -2900,
+    -2700
+   ],
+   "context": {
+    "used": 91400,
+    "window": 1000000,
+    "autocompact": 33000,
+    "exact": true,
+    "parts": [
+     {
+      "key": "system",
+      "label": "System prompt",
+      "tokens": 9600
+     },
+     {
+      "key": "tools",
+      "label": "System tools",
+      "tokens": 17900
+     },
+     {
+      "key": "mcp",
+      "label": "MCP tools",
+      "tokens": 4100
+     },
+     {
+      "key": "memory",
+      "label": "Memory files",
+      "tokens": 2100
+     },
+     {
+      "key": "skills",
+      "label": "Skills",
+      "tokens": 9900
+     },
+     {
+      "key": "messages",
+      "label": "Messages",
+      "tokens": 47800
+     }
+    ],
+    "messages": [
+     {
+      "key": "results",
+      "label": "Tool results",
+      "tokens": 31000
+     },
+     {
+      "key": "calls",
+      "label": "Tool calls",
+      "tokens": 6000
+     },
+     {
+      "key": "thinking",
+      "label": "Thinking",
+      "tokens": 5200
+     },
+     {
+      "key": "notices",
+      "label": "Reminders & other",
+      "tokens": 3400
+     },
+     {
+      "key": "replies",
+      "label": "Claude's replies",
+      "tokens": 1500
+     },
+     {
+      "key": "you",
+      "label": "Your messages",
+      "tokens": 700
+     }
+    ],
+    "groups": [
+     {
+      "label": "Shell output",
+      "tokens": 19500
+     },
+     {
+      "label": "File reads",
+      "tokens": 11000
+     }
+    ],
+    "top": [
+     {
+      "label": "Bash \u00b7 Profile the import",
+      "tokens": 14800
+     },
+     {
+      "label": "Read \u00b7 importer.py",
+      "tokens": 7200
+     }
+    ]
+   },
+   "tips": [
+    "Shell output hold 19.5k. Pipe long output through head, tail or grep."
+   ]
+  },
+  {
+   "id": "demo-3",
+   "title": "Write release notes",
+   "project": "my-web-app",
+   "when": -5400,
+   "ttl": 3600,
+   "cached": 52000,
+   "replies": [],
+   "context": {
+    "used": 54800,
+    "window": 1000000,
+    "autocompact": 33000,
+    "exact": true,
+    "parts": [
+     {
+      "key": "system",
+      "label": "System prompt",
+      "tokens": 9600
+     },
+     {
+      "key": "tools",
+      "label": "System tools",
+      "tokens": 17900
+     },
+     {
+      "key": "mcp",
+      "label": "MCP tools",
+      "tokens": 10700
+     },
+     {
+      "key": "memory",
+      "label": "Memory files",
+      "tokens": 6200
+     },
+     {
+      "key": "skills",
+      "label": "Skills",
+      "tokens": 9900
+     },
+     {
+      "key": "messages",
+      "label": "Messages",
+      "tokens": 500
+     }
+    ],
+    "messages": [
+     {
+      "key": "you",
+      "label": "Your messages",
+      "tokens": 300
+     },
+     {
+      "key": "replies",
+      "label": "Claude's replies",
+      "tokens": 200
+     }
+    ],
+    "groups": [],
+    "top": []
+   },
+   "tips": []
+  },
+  {
+   "id": "demo-4",
+   "title": "Plan the onboarding emails",
+   "project": "growth",
+   "when": -9000,
+   "ttl": 300,
+   "cached": 210000,
+   "replies": [],
+   "context": {
+    "used": 236000,
+    "window": 1000000,
+    "autocompact": 33000,
+    "exact": false,
+    "parts": [
+     {
+      "key": "system",
+      "label": "System, tools & reminders",
+      "tokens": 70000
+     },
+     {
+      "key": "tools",
+      "label": "System tools",
+      "tokens": 0
+     },
+     {
+      "key": "mcp",
+      "label": "MCP tools",
+      "tokens": 0
+     },
+     {
+      "key": "memory",
+      "label": "Memory files",
+      "tokens": 0
+     },
+     {
+      "key": "skills",
+      "label": "Skills",
+      "tokens": 0
+     },
+     {
+      "key": "messages",
+      "label": "Messages",
+      "tokens": 166000
+     }
+    ],
+    "messages": [
+     {
+      "key": "you",
+      "label": "Your messages",
+      "tokens": 42000
+     },
+     {
+      "key": "replies",
+      "label": "Claude's replies",
+      "tokens": 61000
+     },
+     {
+      "key": "thinking",
+      "label": "Thinking",
+      "tokens": 30000
+     },
+     {
+      "key": "calls",
+      "label": "Tool calls",
+      "tokens": 8000
+     },
+     {
+      "key": "results",
+      "label": "Tool results",
+      "tokens": 25000
+     }
+    ],
+    "groups": [],
+    "top": []
+   },
+   "tips": []
+  },
+  {
+   "id": "demo-5",
+   "title": "Refactor the auth middleware",
+   "project": "api-server",
+   "when": -20000,
+   "ttl": 3600,
+   "cached": 402000,
+   "replies": [],
+   "context": {
+    "used": 418000,
+    "window": 1000000,
+    "autocompact": 33000,
+    "exact": true,
+    "parts": [
+     {
+      "key": "system",
+      "label": "System prompt",
+      "tokens": 9600
+     },
+     {
+      "key": "tools",
+      "label": "System tools",
+      "tokens": 17900
+     },
+     {
+      "key": "mcp",
+      "label": "MCP tools",
+      "tokens": 10700
+     },
+     {
+      "key": "memory",
+      "label": "Memory files",
+      "tokens": 8800
+     },
+     {
+      "key": "skills",
+      "label": "Skills",
+      "tokens": 9900
+     },
+     {
+      "key": "messages",
+      "label": "Messages",
+      "tokens": 361100
+     }
+    ],
+    "messages": [
+     {
+      "key": "results",
+      "label": "Tool results",
+      "tokens": 160000
+     },
+     {
+      "key": "calls",
+      "label": "Tool calls",
+      "tokens": 90000
+     },
+     {
+      "key": "thinking",
+      "label": "Thinking",
+      "tokens": 41000
+     },
+     {
+      "key": "notices",
+      "label": "Reminders & other",
+      "tokens": 52000
+     },
+     {
+      "key": "you",
+      "label": "Your messages",
+      "tokens": 12000
+     },
+     {
+      "key": "images",
+      "label": "Images & screenshots",
+      "tokens": 4000
+     },
+     {
+      "key": "replies",
+      "label": "Claude's replies",
+      "tokens": 2100
+     }
+    ],
+    "groups": [],
+    "top": []
+   },
+   "tips": []
+  }
+ ],
+ "today": {
+  "replies": 214,
+  "input": 420,
+  "written": 1830000,
+  "read": 41200000,
+  "output": 262000,
+  "restarts": 2,
+  "restart_tokens": 512000,
+  "compactions": 1,
+  "conversations": 4
+ },
+ "tips": [
+  "2 cold restarts today rewrote 512.0k. Reply within the hour, or run /\u2060compact before a long break."
+ ]
+}
