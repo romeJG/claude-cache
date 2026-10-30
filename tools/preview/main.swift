@@ -2,7 +2,8 @@
 // checking a design change. Built by tools/preview.sh together with the app's
 // Model.swift and MenuView.swift.
 //
-// Usage: preview <scan.json> <out-prefix> [index of the conversation to inspect] [--collapsed]
+// Usage: preview <scan.json> <out-prefix> [index of the conversation to inspect] [--collapsed] [--reveal 0.4]
+// --reveal draws one frame of the grow-in animation (0 = just opened, 1 = done).
 // <scan.json> is `claude_cache_watch.py --json` output, or tools/demo.json, whose
 // times are seconds before now (negative), so the demo always looks current.
 
@@ -51,6 +52,9 @@ store.limits = scanned.limits
 store.dayTips = scanned.tips
 store.selected = scanned.conversations.indices.contains(pick) ? scanned.conversations[pick].id : nil
 store.lastScan = Date().addingTimeInterval(-2)
+if let i = args.firstIndex(of: "--reveal"), i + 1 < args.count, let reveal = Double(args[i + 1]) {
+    store.reveal = reveal
+}
 
 MainActor.assumeIsolated {
     for (name, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {

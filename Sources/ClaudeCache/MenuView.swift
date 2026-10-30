@@ -2,9 +2,63 @@
 
 import SwiftUI
 
+// MARK: - Motion
+//
+// Every open, the bars, rings and charts grow from nothing to their values
+// (`Store.reveal`, 0 → 1, driven by AppDelegate); sections fold open and closed; the ring drains smoothly
+// between the once-a-second updates; numbers roll to their new values; and two
+// things that want action breathe: a cache about to go cold, a limit nearly used
+// up. "Reduce motion" in System Settings turns all of it off.
+
+private struct RevealKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+
+extension EnvironmentValues {
+    /// How far the bars have grown in since the menu opened, 0 → 1.
+    var reveal: CGFloat {
+        get { self[RevealKey.self] }
+        set { self[RevealKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Digits roll to a new value (macOS 14 and later; a plain change before).
+    @ViewBuilder func rolling<V: Equatable>(_ value: V) -> some View {
+        if #available(macOS 14.0, *) {
+            contentTransition(.numericText()).animation(.easeOut(duration: 0.35), value: value)
+        } else {
+            self
+        }
+    }
+
+    /// A slow breathing while `active`.
+    func pulse(_ active: Bool) -> some View { modifier(Pulse(active: active)) }
+}
+
+struct Pulse: ViewModifier {
+    let active: Bool
+    @State private var dim = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(dim ? 0.4 : 1)
+            .onAppear { update() }
+            .onChange(of: active) { _ in update() }
+    }
+
+    func update() {
+        if active && !reduceMotion {
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { dim = true }
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) { dim = false }
+        }
+    }
+}
+
 struct CacheMenu: View {
     @ObservedObject var store: Store
     @Environment(\.colorScheme) var scheme
+
     /// Taller than this and the content scrolls (the menu can't be taller than the screen).
     var maxHeight: CGFloat = 800
     // Which sections are open, remembered between launches.
@@ -29,6 +83,7 @@ struct CacheMenu: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
         }
+        .environment(\.reveal, store.reveal)
     }
 
     func content(now: Date, ink: Ink) -> some View {
@@ -48,6 +103,8 @@ struct CacheMenu: View {
             if let focus = store.focus {
                 VStack(alignment: .leading, spacing: 10) {
                     Card(conversation: focus, now: now, ink: ink)
+                        .id(focus.id)
+                        .transition(.opacity)
                     if let context = focus.context {
                         ContextPanel(context: context, ink: ink, expanded: $openContext, messagesOpen: $openMessages)
                         if !context.top.isEmpty { BiggestItems(items: context.top, ink: ink, expanded: $openBiggest) }
@@ -65,8 +122,8 @@ struct CacheMenu: View {
                                         selected: conversation.id == store.focus?.id)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                store.selected = conversation.id
-                                DispatchQueue.main.async { resizeMenu() }
+                                withAnimation(.easeInOut(duration: 0.25)) { store.selected = conversation.id }
+                                onMain { resizeMenu() }
                             }
                     }
                 }
@@ -125,8 +182,8 @@ struct Chevron: View {
 /// Flip a disclosure and refit the menu to the new height.
 func toggle(_ expanded: Binding<Bool>?) {
     guard let expanded else { return }
-    expanded.wrappedValue.toggle()
-    DispatchQueue.main.async { resizeMenu() }
+    withAnimation(.easeInOut(duration: 0.22)) { expanded.wrappedValue.toggle() }
+    onMain { resizeMenu() }
 }
 
 /// Set by the app delegate: refits the open menu to its content.
@@ -168,6 +225,7 @@ struct LimitsStrip: View {
 }
 
 struct LimitRow: View {
+    @Environment(\.reveal) private var reveal
     let window: LimitWindow
     let now: Date
     let ink: Ink
@@ -180,11 +238,13 @@ struct LimitRow: View {
                 Spacer()
                 Text("\(Int(used.rounded()))% used")
                     .font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(ink.primary)
+                    .rolling(Int(used.rounded()))
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(ink.track)
-                    Capsule().fill(ink.usage(used)).frame(width: max(3, geo.size.width * used / 100))
+                    Capsule().fill(ink.usage(used)).frame(width: max(3, geo.size.width * used / 100 * reveal))
+                        .pulse(used >= 85)
                 }
             }
             .frame(height: 6)
@@ -209,6 +269,7 @@ struct LimitRow: View {
 
 /// Today across every conversation: how well the cache is working and what it cost.
 struct TodayStrip: View {
+    @Environment(\.reveal) private var reveal
     let today: Today
     let tips: [String]
     let ink: Ink
@@ -239,8 +300,9 @@ struct TodayStrip: View {
             GeometryReader { geo in
                 let all = Double(max(1, today.read + today.written + today.input))
                 HStack(spacing: 1) {
-                    Rectangle().fill(ink.tint(.hot)).frame(width: geo.size.width * Double(today.read) / all)
-                    Rectangle().fill(ink.tint(.low)).frame(width: geo.size.width * Double(today.written + today.input) / all)
+                    Rectangle().fill(ink.tint(.hot)).frame(width: geo.size.width * Double(today.read) / all * reveal)
+                    Rectangle().fill(ink.tint(.low)).frame(width: geo.size.width * Double(today.written + today.input) / all * reveal)
+                    Spacer(minLength: 0)
                 }
                 .clipShape(Capsule())
             }
@@ -258,6 +320,7 @@ struct Stat: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(value).font(.system(size: 15, weight: .bold).monospacedDigit())
+                .rolling(value)
                 .foregroundStyle(tint ?? ink.primary)
             Text(label).font(.caption2).foregroundStyle(ink.secondary)
         }
@@ -280,6 +343,7 @@ struct ContextPanel: View {
                          expanded: $expanded)
             HStack(alignment: .firstTextBaseline) {
                 Text("\(percent(context.share(context.used))) used")
+                    .rolling(context.used)
                     .font(.system(size: 17, weight: .bold).monospacedDigit()).foregroundStyle(ink.primary)
                 Spacer()
                 Text("\(tokens(context.used)) / \(tokens(context.window))")
@@ -318,6 +382,7 @@ struct ContextPanel: View {
 }
 
 struct StackedBar: View {
+    @Environment(\.reveal) private var reveal
     let segments: [(Color, Double)]
     let ink: Ink
     var height: CGFloat = 6
@@ -327,7 +392,7 @@ struct StackedBar: View {
             HStack(spacing: 1.5) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
                     if seg.1 > 0 {
-                        Rectangle().fill(seg.0).frame(width: max(2, geo.size.width * seg.1))
+                        Rectangle().fill(seg.0).frame(width: max(2, geo.size.width * seg.1 * reveal))
                     }
                 }
                 Spacer(minLength: 0)
@@ -367,6 +432,7 @@ struct PartRow: View {
 
 /// A smaller row with a bar showing its share of its parent.
 struct SubRow: View {
+    @Environment(\.reveal) private var reveal
     let label: String
     let tokens: Int
     let fraction: Double
@@ -383,7 +449,7 @@ struct SubRow: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(ink.track)
-                    Capsule().fill(color).frame(width: max(2, geo.size.width * fraction))
+                    Capsule().fill(color).frame(width: max(2, geo.size.width * fraction * reveal))
                 }
             }
             .frame(width: labelWidth == nil ? 90 : nil, height: 4)
@@ -549,7 +615,7 @@ struct Card: View {
             }
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 10).fill(ink.surface))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ink.tint(state), lineWidth: 1.5))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ink.tint(state), lineWidth: 1.5).pulse(state == .low))
         }
     }
 
@@ -566,6 +632,7 @@ struct Card: View {
 
 /// Time left as a draining ring, minutes in the middle.
 struct Ring: View {
+    @Environment(\.reveal) private var reveal
     let fraction: Double
     let state: CacheState
     let left: Double
@@ -577,15 +644,18 @@ struct Ring: View {
         ZStack {
             Circle().stroke(ink.track, lineWidth: line)
             Circle()
-                .trim(from: 0, to: fraction)
+                .trim(from: 0, to: fraction * reveal)
                 .stroke(ink.tint(state), style: StrokeStyle(lineWidth: line, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                // Drain smoothly between the once-a-second updates.
+                .animation(.linear(duration: 1), value: fraction)
             if size > 40 {
                 VStack(spacing: -1) {
                     Text(state.emoji).font(.system(size: 13))
                     Text("\(Int(ceil(max(0, left) / 60)))m")
                         .font(.system(size: 11, weight: .bold).monospacedDigit())
                         .foregroundStyle(ink.primary)
+                        .rolling(Int(ceil(max(0, left) / 60)))
                 }
             } else {
                 Text(state.emoji).font(.system(size: 12))
@@ -598,6 +668,7 @@ struct Ring: View {
 /// The past hour as a bar chart of replies per 5 minutes | now | the next hour:
 /// the warm window still ahead, yellow for its last 20 minutes.
 struct Timeline: View {
+    @Environment(\.reveal) private var reveal
     let conversation: Conversation
     let now: Date
     let state: CacheState
@@ -624,7 +695,7 @@ struct Timeline: View {
             ZStack(alignment: .topLeading) {
                 // activity: replies per 5 minutes over the past hour
                 ForEach(0..<Self.bins, id: \.self) { i in
-                    let h = counts[i] == 0 ? 0 : max(2, chart * CGFloat(counts[i]) / CGFloat(peak))
+                    let h = counts[i] == 0 ? 0 : max(2, chart * CGFloat(counts[i]) / CGFloat(peak)) * reveal
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(ink.tint(state))
                         .frame(width: max(1, binW - 2), height: h)
@@ -635,6 +706,8 @@ struct Timeline: View {
                     .frame(width: w, height: bar).offset(y: barY)
                 // warm window ahead
                 if expiry > nowT {
+                    // The window grows out from "now" as the menu opens.
+                    let x = { (t: Double) -> CGFloat in x(nowT) + (x(t) - x(nowT)) * reveal }
                     let warnStart = max(nowT, expiry - warnSeconds)
                     if warnStart > nowT {
                         Rectangle().fill(ink.tint(.hot))

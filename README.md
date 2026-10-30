@@ -36,6 +36,8 @@ Nothing in Claude's own interface tells you how much of that time is left, or wh
 | **To save tokens** | Up to three suggestions based on the numbers. For example, MCP tools that cost 10k on every request, shell output worth piping through `grep`, screenshots that could be read as text, or a context that's due for `/compact`. |
 | **Recent conversations** | Your five latest conversations, each with its cache state, its context size and a small bar of what fills it. Tap one to inspect it. |
 
+Every time the menu opens, its bars, rings and charts grow in. Sections fold open and shut, the cache ring drains smoothly, and numbers roll when they change. A cache about to go cold, or a limit above 85%, breathes gently to catch your eye. Turning on **Reduce motion** (System Settings › Accessibility › Display) switches it all off.
+
 Tap any section heading to collapse it to a one-line summary. The menu remembers which sections are open. The app re-reads the logs every 5 seconds, and its menu has **Refresh now**, **Open at Login** and **Quit**.
 
 ## Install
@@ -122,6 +124,7 @@ tools/preview.sh                 # demo data → build/preview-light.png, build/
 tools/preview.sh --live          # your own conversations
 tools/preview.sh --collapsed     # every section closed
 tools/preview.sh --pick 1        # inspect the second conversation
+tools/preview.sh --reveal 0.4    # one frame of the grow-in animation
 ```
 
 ## Privacy

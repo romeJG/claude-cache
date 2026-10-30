@@ -4,6 +4,7 @@
 #   tools/preview.sh --live               your own conversations right now
 #   tools/preview.sh --collapsed          every section closed
 #   tools/preview.sh --pick 1             inspect the second conversation
+#   tools/preview.sh --reveal 0.4         a frame of the grow-in animation
 set -e
 root="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$root/build"
@@ -15,6 +16,7 @@ while [ $# -gt 0 ]; do
     --live) /usr/bin/python3 -I "$root/Sources/claude_cache_watch.py" --json > "$root/build/live.json"; data="$root/build/live.json" ;;
     --collapsed) extra="--collapsed" ;;
     --pick) shift; pick="$1" ;;
+    --reveal) shift; extra="$extra --reveal $1" ;;
   esac
   shift
 done

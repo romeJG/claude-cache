@@ -132,6 +132,12 @@ Reading a large log in full takes about 0.4 s. The scanner remembers each log's 
   - Updates the title every second.
   - Hosts the SwiftUI menu inside an `NSMenuItem`, resizing it when the content changes.
   - **Open at Login** uses `SMAppService.mainApp`.
+- **Motion**
+  - `Store.reveal` goes from 0 to 1 with a spring each time the menu opens. Every bar, ring and chart multiplies its length by it.
+  - The app delegate drives it rather than the view. A view inside a closed menu doesn't update, so it can't reset itself to 0. So `menuDidClose` sets 0, and `menuWillOpen` animates to 1 a moment after the menu has drawn 0.
+  - Anything that must happen while the menu is open uses `onMain` (in `Model.swift`) or a timer in the `.common` run-loop mode, never `DispatchQueue.main.async`. An open menu runs the main run loop in event-tracking mode, which doesn't drain the main dispatch queue. Work queued there would wait until the menu closed, including resizing the menu after a fold and showing a new scan.
+  - Folding, the ring's drain (`.linear(duration: 1)` between the once-a-second ticks), rolling digits (macOS 14+) and the breathing (`Pulse`) are ordinary SwiftUI animations.
+  - Reduce motion turns off the grow-in and the breathing.
 - **`MenuView.swift`**
   - All the views.
   - The menu is see-through glass, so it paints its own solid panel, and every colour is explicit (see `Ink` in `Model.swift`). SwiftUI's `.secondary` colours blend with the desktop behind the menu and become hard to read.

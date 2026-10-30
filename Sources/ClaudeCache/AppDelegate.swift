@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let screen = NSScreen.main?.visibleFrame.height ?? 900
         hosting = NSHostingView(rootView: CacheMenu(store: store, maxHeight: screen - 140))
         resizeMenu = { [weak self] in self?.sizeMenu() }
+        store.reveal = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 0
         content.view = hosting
         menu.addItem(content)
         menu.addItem(.separator())
@@ -41,6 +42,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         sizeMenu()
+        // The bars, rings and charts grow in. A closed menu's view doesn't update,
+        // so let the open menu draw them at 0 first, then grow (a timer, because
+        // an open menu only runs common-mode run-loop work; see onMain).
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            RunLoop.main.add(Timer(timeInterval: 0.05, repeats: false) { [weak self] _ in
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) { self?.store.reveal = 1 }
+            }, forMode: .common)
+        }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        // Ready for the next open: start from nothing (or stay put under Reduce motion).
+        store.reveal = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 0
     }
 
     let loginItem = NSMenuItem(title: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
@@ -83,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 process.waitUntilExit()
                 result = try JSONDecoder().decode(Scan.self, from: data)
             } catch {}
-            DispatchQueue.main.async {
+            onMain {
                 self.scanning = false
                 if let result {
                     self.store.conversations = result.conversations
@@ -96,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 self.store.lastScan = Date()
                 // Tips and rows come and go between scans: keep the menu fitted.
-                DispatchQueue.main.async { self.sizeMenu() }
+                onMain { self.sizeMenu() }
                 self.renderTitle()
             }
         }

@@ -134,6 +134,14 @@ struct Ink {
     }
 }
 
+/// Run `work` on the main thread soon, even while the menu is open. An open menu
+/// runs the main run loop in its event-tracking mode, which never drains the main
+/// dispatch queue: `DispatchQueue.main.async` would wait until the menu closes.
+func onMain(_ work: @escaping () -> Void) {
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue, work)
+    CFRunLoopWakeUp(CFRunLoopGetMain())
+}
+
 func clock(_ seconds: Double) -> String {
     let s = Int(abs(seconds))
     return String(format: "%d:%02d", s / 60, s % 60)
@@ -148,6 +156,9 @@ final class Store: ObservableObject {
     @Published var lastScan: Date?
     /// The conversation shown in full; the latest one unless you picked another.
     @Published var selected: String?
+    /// How far the bars have grown in since the menu opened, 0 → 1. Set by the app
+    /// delegate (a view inside a closed menu doesn't update, so it can't reset itself).
+    @Published var reveal: CGFloat = 1
 
     var focus: Conversation? { conversations.first { $0.id == selected } ?? conversations.first }
 }
