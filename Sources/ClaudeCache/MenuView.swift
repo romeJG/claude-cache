@@ -638,17 +638,22 @@ struct Ring: View {
     let left: Double
     var size: CGFloat = 50
     let ink: Ink
+    @State private var shown: Double?
 
     var body: some View {
         let line = size > 40 ? 5.0 : 3.0
         ZStack {
             Circle().stroke(ink.track, lineWidth: line)
             Circle()
-                .trim(from: 0, to: fraction * reveal)
+                .trim(from: 0, to: (shown ?? fraction) * reveal)
                 .stroke(ink.tint(state), style: StrokeStyle(lineWidth: line, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                // Drain smoothly between the once-a-second updates.
-                .animation(.linear(duration: 1), value: fraction)
+                // Drain smoothly between the once-a-second updates. Animate only the
+                // trim: an implicit .animation here would also drag the arc across
+                // the menu for a second whenever a section opens or closes.
+                .onChange(of: fraction) { new in
+                    withAnimation(.linear(duration: 1)) { shown = new }
+                }
             if size > 40 {
                 VStack(spacing: -1) {
                     Text(state.emoji).font(.system(size: 13))
