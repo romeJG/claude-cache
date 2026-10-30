@@ -55,10 +55,28 @@ struct Today: Decodable {
     }
 }
 
+/// One of the plan's usage windows (5-hour session, the week, …), as /usage shows it.
+struct LimitWindow: Decodable {
+    let key: String
+    let label: String
+    let used: Double       // percent of the window's allowance
+    let resets: Double?    // unix time it resets
+
+    var isWeekly: Bool { key.hasPrefix("seven_day") }
+}
+
+struct Limits: Decodable {
+    let windows: [LimitWindow]?
+    let plan: String?
+    let error: String?
+    let fetched: Double?   // when Anthropic last answered
+}
+
 struct Scan: Decodable {
     let conversations: [Conversation]
     let today: Today
     let tips: [String]
+    let limits: Limits?
 }
 
 let warnSeconds: Double = 20 * 60  // ⏳ from here down
@@ -100,6 +118,12 @@ struct Ink {
         default: track
         }
     }
+    /// How close a usage window is to its limit: fine, getting there, nearly out.
+    func usage(_ percent: Double) -> Color {
+        percent >= 85 ? (dark ? Color(red: 1.0, green: 0.45, blue: 0.42) : Color(red: 0.80, green: 0.15, blue: 0.12))
+            : percent >= 60 ? tint(.low)
+            : part("mcp")
+    }
     /// Status colours tuned for each mode: bright on dark, deeper on light.
     func tint(_ state: CacheState) -> Color {
         switch state {
@@ -118,6 +142,7 @@ func clock(_ seconds: Double) -> String {
 final class Store: ObservableObject {
     @Published var conversations: [Conversation] = []
     @Published var today: Today?
+    @Published var limits: Limits?
     @Published var dayTips: [String] = []
     @Published var error: String?
     @Published var lastScan: Date?

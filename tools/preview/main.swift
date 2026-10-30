@@ -21,6 +21,15 @@ if var conversations = json["conversations"] as? [[String: Any]] {
     }
     json["conversations"] = conversations
 }
+// Demo limits use times relative to now, too.
+if var limits = json["limits"] as? [String: Any], var windows = limits["windows"] as? [[String: Any]] {
+    for i in windows.indices {
+        if let resets = windows[i]["resets"] as? Double, resets < 1_000_000_000 { windows[i]["resets"] = now + resets }
+    }
+    limits["windows"] = windows
+    if let fetched = limits["fetched"] as? Double, fetched < 1_000_000_000 { limits["fetched"] = now + fetched }
+    json["limits"] = limits
+}
 let scanned = try! JSONDecoder().decode(Scan.self, from: JSONSerialization.data(withJSONObject: json))
 let prefix = args[2]
 let pick = args.count > 3 ? Int(args[3]) ?? 0 : 0
@@ -38,6 +47,7 @@ if collapsed {
 let store = Store()
 store.conversations = scanned.conversations
 store.today = scanned.today
+store.limits = scanned.limits
 store.dayTips = scanned.tips
 store.selected = scanned.conversations.indices.contains(pick) ? scanned.conversations[pick].id : nil
 store.lastScan = Date().addingTimeInterval(-2)

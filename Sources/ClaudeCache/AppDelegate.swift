@@ -88,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if let result {
                     self.store.conversations = result.conversations
                     self.store.today = result.today
+                    self.store.limits = result.limits
                     self.store.dayTips = result.tips
                     self.store.error = nil
                 } else {
@@ -108,7 +109,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let left = latest.secondsLeft(at: Date())
         let state = CacheState(left: left)
-        statusItem.button?.title = left > 0 ? "\(state.emoji) \(Int(ceil(left / 60)))m" : "\(state.emoji) cold"
+        var title = left > 0 ? "\(state.emoji) \(Int(ceil(left / 60)))m" : "\(state.emoji) cold"
+        // The 5-hour session's usage, when Anthropic has told us.
+        if let session = store.limits?.windows?.first(where: { $0.key == "five_hour" }) {
+            title += " · \(Int(session.used.rounded()))%"
+        }
+        statusItem.button?.title = title
         statusItem.button?.toolTip = "Claude prompt cache: \(latest.title)"
     }
 

@@ -27,6 +27,23 @@ The scanner reads these record types:
 | `api-request-blob` | Messages Claude Code sent. The scanner uses them only to find the memory-file and skill-list reminders the app injected. |
 | `user` / `assistant` messages since the last compaction | The conversation itself: your messages, Claude's replies, tool calls and tool results. |
 
+## Plan limits
+
+The logs only mention a limit when you hit it (a `rate_limit` error with `rateLimitType: five_hour` and the reset time). So `limits()` in the scanner asks Anthropic instead, the same way Claude Code's `/usage` does:
+
+1. **Read Claude Code's sign-in.** It's the `claudeAiOauth` entry in the login-Keychain item `Claude Code-credentials`, read with `security find-generic-password -w`. `/usr/bin/security` already has access to that item, so macOS doesn't ask.
+2. **Renew it if it has expired** (or expires within 2 minutes).
+   - The app sends the refresh token to `console.anthropic.com/v1/oauth/token`, using Claude Code's own client id.
+   - It reads the item again first: if Claude Code renewed it in the meantime, it uses that and saves nothing.
+   - Otherwise it saves the new tokens back with `security add-generic-password -U -X <hex>`, changing only `claudeAiOauth` and keeping the item's other entries.
+   - It then reads the item back and checks that it matches exactly.
+   - A first version piped the command to `security -i`, which cuts lines at 4 KB. It truncated the item and lost the sign-in, so don't go back to that.
+3. **Ask for the usage.** `GET api.anthropic.com/api/oauth/usage` with the access token and `anthropic-beta: oauth-2025-04-20`. Every entry in the answer with a `utilization` (percent used) and `resets_at` becomes a row: `five_hour`, `seven_day`, and any per-model week such as `seven_day_opus`.
+
+The answer is cached in `~/Library/Caches/local.claude-cache-bar/limits.json` and asked for again after 3 minutes, failures included. The cache holds the percentages, never a token.
+
+When there's no sign-in, or it can't be renewed, the section says so with what to do (`claude`, then `/login`).
+
 ## The cache timer
 
 Each reply writes to the cache with a lifetime: 1 hour if the reply's `ephemeral_1h_input_tokens` is above 0, otherwise 5 minutes. Every request that reads the cache restarts the clock. So:
@@ -110,7 +127,7 @@ Reading a large log in full takes about 0.4 s. The scanner remembers each log's 
 ## The app
 
 - **`AppDelegate.swift`**
-  - Owns the status item.
+  - Owns the status item. Its title adds the 5-hour session's percent used when it's known.
   - Runs `/usr/bin/python3 -I claude_cache_watch.py --json` every 5 seconds on a background queue.
   - Updates the title every second.
   - Hosts the SwiftUI menu inside an `NSMenuItem`, resizing it when the content changes.

@@ -1,8 +1,8 @@
 # Claude Cache
 
-A macOS menu bar app that shows whether Claude's prompt cache is still warm for your recent conversations, what is filling each conversation's context, and what you could change to spend fewer tokens.
+A macOS menu bar app that shows how much of your plan's 5-hour and weekly limits you've used, whether Claude's prompt cache is still warm for your recent conversations, what is filling each conversation's context, and what you could change to spend fewer tokens.
 
-It reads the conversation logs that Claude Code and the Claude desktop app already keep on your Mac. It sends nothing anywhere.
+It reads the conversation logs that Claude Code and the Claude desktop app already keep on your Mac. The only thing it asks the internet for is your plan usage, from Anthropic ([Privacy](#privacy)).
 
 <p align="center">
   <img src="docs/menu-dark.png" width="380" alt="The Claude Cache menu in dark mode: today's cache totals, a warm conversation's cache timer, its context broken down by part, tips, and recent conversations">
@@ -22,12 +22,13 @@ Nothing in Claude's own interface tells you how much of that time is left, or wh
 
 ## What it shows
 
-**The menu bar** shows the latest conversation's time left: `🔥 42m` while it's warm, `⏳ 12m` in the last 20 minutes, `🧊 cold` once it has expired.
+**The menu bar** shows the latest conversation's time left: `🔥 42m` while it's warm, `⏳ 12m` in the last 20 minutes, `🧊 cold` once it has expired. After it comes how much of the 5-hour session you've used, e.g. `🔥 42m · 38%`.
 
 **The menu** shows, from top to bottom:
 
 | Section | What it tells you |
 |---|---|
+| **Plan limits** | How much of the 5-hour session and the week you've used, with a bar for each and when it resets. It also covers any per-model weekly limit your plan has, the same windows Claude Code's `/usage` shows. The bars turn yellow from 60% and red from 85%. |
 | **Today** | What share of today's input came from the cache, and the totals for cache reads, writes and output. A warning appears when a cold restart rewrote a whole context. |
 | **Cache card** | For the selected conversation: a ring with the minutes left, and when the cache expires. A timeline shows your replies over the past hour, a "now" marker, and the warm window still ahead (yellow for its last 20 minutes). |
 | **Context** | The same parts as Claude Code's Context panel: system prompt, system tools, MCP tools, memory files, skills, messages, autocompact buffer and free space. Each part shows its tokens and its share of the context window. **Messages** opens into what the conversation itself is made of: tool calls, tool results, thinking, your messages, images, Claude's replies, and reminders. |
@@ -71,6 +72,7 @@ cd claude-cache
   ```
 - Building from source needs the Swift compiler, which the same tools provide.
 - Claude Code, or the Claude desktop app's Cowork mode, on the same Mac. The app only sees conversations whose logs are on this machine.
+- For **Plan limits**: Claude Code signed in on this Mac. Run `claude` in Terminal once and use `/login` if it asks. The desktop app keeps its sign-in elsewhere, so the app can't use it.
 
 ## Use it without the menu bar
 
@@ -84,6 +86,7 @@ python3 Sources/claude_cache_watch.py --json     # one scan as JSON (what the ap
 
 ## How accurate it is
 
+- **Plan limits:** exactly what Anthropic reports, up to 3 minutes old.
 - **Cache timer:** exact, as long as the log is current. It uses the time and the cache lifetime of each conversation's last reply.
 - **Today's totals:** exact. Each reply logs its own token counts.
 - **Context total:** exact. It is the total input of the latest reply.
@@ -103,7 +106,7 @@ Sources/
     AppDelegate.swift     status item, menu, 5-second scans, Open at Login
     MenuView.swift        everything inside the menu
     Model.swift           the scan's data, colours and number formatting
-  claude_cache_watch.py   reads the logs; terminal view and --json for the app
+  claude_cache_watch.py   reads the logs and plan usage; terminal view and --json for the app
 tools/
   preview.sh              renders the menu to PNGs without running the app
   preview/main.swift      the renderer
@@ -123,8 +126,10 @@ tools/preview.sh --pick 1        # inspect the second conversation
 
 ## Privacy
 
-Everything stays on your Mac.
-
-- The app reads conversation logs under `~/.claude/projects` and `~/Library/Application Support/Claude`.
-- It keeps a small cache of its results in `~/Library/Caches/local.claude-cache-bar/`.
-- It makes no network requests.
+- The app reads conversation logs under `~/.claude/projects` and `~/Library/Application Support/Claude`. They never leave your Mac.
+- For **Plan limits**, every 3 minutes it asks Anthropic (`api.anthropic.com/api/oauth/usage`, the request behind Claude Code's `/usage`) how much of your plan you've used. It signs that request with Claude Code's sign-in from your login Keychain (the item `Claude Code-credentials`).
+  - When that sign-in has expired, the app renews it with Anthropic, as Claude Code does, and saves it back to the same item, so Claude Code stays signed in.
+  - The sign-in is never written anywhere else, and it is only sent to Anthropic.
+  - This endpoint isn't documented by Anthropic, so it may change.
+- It keeps a small cache of its results in `~/Library/Caches/local.claude-cache-bar/`: the scan, and the usage percentages. The cache never holds the sign-in.
+- It makes no other network requests.

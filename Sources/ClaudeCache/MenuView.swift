@@ -8,6 +8,7 @@ struct CacheMenu: View {
     /// Taller than this and the content scrolls (the menu can't be taller than the screen).
     var maxHeight: CGFloat = 800
     // Which sections are open, remembered between launches.
+    @AppStorage("open.limits") var openLimits = true
     @AppStorage("open.today") var openToday = true
     @AppStorage("open.context") var openContext = true
     @AppStorage("open.messages") var openMessages = false
@@ -37,6 +38,9 @@ struct CacheMenu: View {
                 Text(error).font(.caption).foregroundStyle(.red)
             } else if store.conversations.isEmpty {
                 Text("No conversations with replies yet").font(.callout).foregroundStyle(ink.secondary)
+            }
+            if let limits = store.limits {
+                LimitsStrip(limits: limits, now: now, ink: ink, expanded: $openLimits)
             }
             if let today = store.today {
                 TodayStrip(today: today, tips: store.dayTips, ink: ink, expanded: $openToday)
@@ -127,6 +131,81 @@ func toggle(_ expanded: Binding<Bool>?) {
 
 /// Set by the app delegate: refits the open menu to its content.
 var resizeMenu: () -> Void = {}
+
+/// The plan's 5-hour and weekly usage, from Anthropic (see claude_cache_watch.py).
+struct LimitsStrip: View {
+    let limits: Limits
+    let now: Date
+    let ink: Ink
+    @Binding var expanded: Bool
+
+    var body: some View {
+        let windows = limits.windows ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            SectionTitle("Plan limits", ink: ink, note: note(windows), expanded: $expanded)
+            if expanded {
+                ForEach(windows, id: \.key) { LimitRow(window: $0, now: now, ink: ink) }
+                if let error = limits.error {
+                    Tip(text: error, icon: windows.isEmpty ? "🔑" : "⚠️", ink: ink)
+                }
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(ink.surface))
+    }
+
+    func note(_ windows: [LimitWindow]) -> String? {
+        if !expanded {
+            let parts = windows.prefix(2).map { "\($0.isWeekly ? "week" : "5h") \(Int($0.used.rounded()))%" }
+            return parts.isEmpty ? (limits.error == nil ? nil : "unavailable") : parts.joined(separator: " · ")
+        }
+        guard let fetched = limits.fetched else { return nil }
+        let age = now.timeIntervalSince1970 - fetched
+        // Asked every 3 minutes: say so only when the answer is older than that.
+        return age > 600 ? "as of \(Date(timeIntervalSince1970: fetched).formatted(date: .omitted, time: .shortened))"
+            : limits.plan.map { $0.capitalized + " plan" }
+    }
+}
+
+struct LimitRow: View {
+    let window: LimitWindow
+    let now: Date
+    let ink: Ink
+
+    var body: some View {
+        let used = min(100, max(0, window.used))
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(window.label).font(.system(size: 12, weight: .medium)).foregroundStyle(ink.primary)
+                Spacer()
+                Text("\(Int(used.rounded()))% used")
+                    .font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(ink.primary)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(ink.track)
+                    Capsule().fill(ink.usage(used)).frame(width: max(3, geo.size.width * used / 100))
+                }
+            }
+            .frame(height: 6)
+            if let resets = window.resets {
+                Text("Resets \(resetText(resets))").font(.caption2).foregroundStyle(ink.secondary)
+            }
+        }
+    }
+
+    /// "in 2 h 14 min (3:30 PM)" for the session; "Thu 9:00 AM" for a week.
+    func resetText(_ resets: Double) -> String {
+        let date = Date(timeIntervalSince1970: resets)
+        let left = max(0, Int(resets - now.timeIntervalSince1970))
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if left >= 24 * 3600 {
+            return date.formatted(.dateTime.weekday(.abbreviated)) + " " + time
+        }
+        let h = left / 3600, m = (left % 3600) / 60
+        return "in " + (h > 0 ? "\(h) h \(m) min" : "\(m) min") + " (\(time))"
+    }
+}
 
 /// Today across every conversation: how well the cache is working and what it cost.
 struct TodayStrip: View {

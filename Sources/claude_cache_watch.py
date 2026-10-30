@@ -22,7 +22,10 @@ import curses
 import glob
 import json
 import os
+import subprocess
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 HOME = os.path.expanduser('~')
@@ -462,6 +465,147 @@ def analyze(path):
     }
 
 
+# ---------------------------------------------------------------------------
+# Plan limits: the 5-hour session and weekly usage, as Claude Code's /usage shows.
+#
+# The logs only mention a limit once you hit it, so this asks Anthropic, the way
+# Claude Code does: with the sign-in Claude Code keeps in the login Keychain
+# (item "Claude Code-credentials"). When that sign-in has expired (it does if you
+# mostly use the desktop app), it is renewed with its refresh token and the new
+# one saved back to the same item, so Claude Code stays signed in. Asked at most
+# every LIMITS_EVERY seconds; the answer (never a token) is cached on disk.
+
+LIMITS_FILE = os.path.join(HOME, 'Library/Caches/local.claude-cache-bar/limits.json')
+LIMITS_EVERY = 180
+KEYCHAIN_SERVICE = 'Claude Code-credentials'
+USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token'
+CLAUDE_CODE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
+LIMIT_LABELS = {
+    'five_hour': '5-hour session',
+    'seven_day': 'Week · all models',
+    'seven_day_opus': 'Week · Opus',
+    'seven_day_sonnet': 'Week · Sonnet',
+}
+
+
+class LimitsError(Exception):
+    pass
+
+
+def keychain_read():
+    out = subprocess.run(['security', 'find-generic-password', '-s', KEYCHAIN_SERVICE, '-w'],
+                         capture_output=True, text=True, timeout=10)
+    if out.returncode != 0:
+        raise LimitsError('Sign in to Claude Code in Terminal (claude) to show your limits.')
+    try:
+        return json.loads(out.stdout)
+    except ValueError:
+        raise LimitsError("Couldn't read Claude Code's sign-in.")
+
+
+def keychain_account():
+    out = subprocess.run(['security', 'find-generic-password', '-s', KEYCHAIN_SERVICE],
+                         capture_output=True, text=True, timeout=10)
+    for line in out.stdout.splitlines():
+        if '"acct"' in line and '=' in line:
+            value = line.split('=', 1)[1].strip()
+            if value.startswith('"') and value.endswith('"'):
+                return value[1:-1]
+    return os.environ.get('USER', '')
+
+
+def keychain_write(creds):
+    """Save the credentials back, hex-encoded the way Claude Code itself does,
+    then read them back to be sure they arrived whole. (`security -i` reading
+    from stdin is not an option: it cuts lines at 4 KB.)"""
+    text = json.dumps(creds, separators=(',', ':'))
+    out = subprocess.run(['security', 'add-generic-password', '-U', '-a', keychain_account(),
+                          '-s', KEYCHAIN_SERVICE, '-X', text.encode().hex()],
+                         capture_output=True, text=True, timeout=10)
+    if out.returncode != 0 or keychain_read() != creds:
+        raise LimitsError("Couldn't save the renewed sign-in: run claude in Terminal and /login.")
+
+
+def post_json(url, body=None, headers=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method='POST' if data else 'GET', headers={
+        'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'claude-cache',
+        **(headers or {})})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.load(r)
+
+
+def fresh_token():
+    """Claude Code's access token, renewed first if it has expired (or nearly)."""
+    creds = keychain_read()
+    oauth = creds.get('claudeAiOauth') or {}
+    if not oauth.get('accessToken'):
+        raise LimitsError('Sign in to Claude Code in Terminal (claude) to show your limits.')
+    if (oauth.get('expiresAt') or 0) / 1000 > time.time() + 120:
+        return oauth['accessToken'], oauth.get('subscriptionType')
+    if not oauth.get('refreshToken'):
+        raise LimitsError('Your Claude Code sign-in expired: run claude in Terminal once.')
+    try:
+        got = post_json(TOKEN_URL, {'grant_type': 'refresh_token', 'refresh_token': oauth['refreshToken'],
+                                    'client_id': CLAUDE_CODE_CLIENT_ID})
+    except urllib.error.HTTPError:
+        raise LimitsError('Your Claude Code sign-in expired: run claude in Terminal once.')
+    # Claude Code may have renewed it meanwhile: never overwrite a newer sign-in.
+    latest = keychain_read()
+    if (latest.get('claudeAiOauth') or {}).get('refreshToken') != oauth['refreshToken']:
+        return latest['claudeAiOauth']['accessToken'], oauth.get('subscriptionType')
+    oauth = dict(oauth, accessToken=got['access_token'],
+                 refreshToken=got.get('refresh_token') or oauth['refreshToken'],
+                 expiresAt=int((time.time() + int(got.get('expires_in') or 3600)) * 1000))
+    keychain_write(dict(latest, claudeAiOauth=oauth))
+    return oauth['accessToken'], oauth.get('subscriptionType')
+
+
+def fetch_limits():
+    token, plan = fresh_token()
+    try:
+        usage = post_json(USAGE_URL, headers={'Authorization': 'Bearer ' + token,
+                                              'anthropic-beta': 'oauth-2025-04-20'})
+    except urllib.error.HTTPError as e:
+        raise LimitsError(f'Anthropic answered {e.code} for your usage.')
+    windows = []
+    for key, value in usage.items():
+        if not isinstance(value, dict) or value.get('utilization') is None:
+            continue
+        resets = value.get('resets_at')
+        windows.append({
+            'key': key,
+            'label': LIMIT_LABELS.get(key, key.replace('_', ' ').capitalize()),
+            'used': float(value['utilization']),
+            'resets': datetime.fromisoformat(resets.replace('Z', '+00:00')).timestamp() if resets else None,
+        })
+    order = list(LIMIT_LABELS)
+    windows.sort(key=lambda w: order.index(w['key']) if w['key'] in order else len(order))
+    return {'windows': windows, 'plan': plan}
+
+
+def limits():
+    """The cached answer, asking again when it is older than LIMITS_EVERY."""
+    try:
+        cached = json.load(open(LIMITS_FILE))
+    except (OSError, ValueError):
+        cached = {}
+    if time.time() - cached.get('checked', 0) < LIMITS_EVERY:
+        return cached
+    result = dict(cached, checked=time.time())
+    try:
+        result.update(fetch_limits(), fetched=time.time(), error=None)
+    except (LimitsError, OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
+        result['error'] = str(e) if isinstance(e, LimitsError) else f"Couldn't reach Anthropic ({type(e).__name__})."
+    try:
+        os.makedirs(os.path.dirname(LIMITS_FILE), exist_ok=True)
+        json.dump(result, open(LIMITS_FILE, 'w'))
+    except OSError:
+        pass
+    return result
+
+
 def analyze_all(count):
     """The `count` most recent conversations plus today's totals across every log.
     Results are remembered per file (size + modified time), so only logs that
@@ -527,7 +671,7 @@ def analyze_all(count):
         c = {k: v for k, v in c.items() if k not in ('usage', 'restarts', 'compactions')}
         c['tips'] = tips_for(c)
         shown.append(c)
-    return {'conversations': shown, 'today': today, 'tips': day_tips(today)}
+    return {'conversations': shown, 'today': today, 'tips': day_tips(today), 'limits': limits()}
 
 
 def k(n):

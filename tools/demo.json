@@ -478,5 +478,30 @@
  },
  "tips": [
   "2 cold restarts today rewrote 512.0k. Reply within the hour, or run /\u2060compact before a long break."
- ]
+ ],
+ "limits": {
+  "windows": [
+   {
+    "key": "five_hour",
+    "label": "5-hour session",
+    "used": 38,
+    "resets": 8040
+   },
+   {
+    "key": "seven_day",
+    "label": "Week \u00b7 all models",
+    "used": 64,
+    "resets": 264200
+   },
+   {
+    "key": "seven_day_opus",
+    "label": "Week \u00b7 Opus",
+    "used": 12,
+    "resets": 264200
+   }
+  ],
+  "plan": "pro",
+  "error": null,
+  "fetched": -60
+ }
 }
