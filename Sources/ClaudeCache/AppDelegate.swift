@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let screen = NSScreen.main?.visibleFrame.height ?? 900
         hosting = NSHostingView(rootView: CacheMenu(store: store, maxHeight: screen - 140))
         resizeMenu = { [weak self] in self?.sizeMenu() }
+        runCompact = { [weak self] in self?.compact($0) }
         store.reveal = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 0
         content.view = hosting
         menu.addItem(content)
@@ -133,5 +134,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func refreshNow() { scan() }
+
+    /// `claude --resume <id> -p /compact` in the conversation's folder (sessions are
+    /// stored per folder). Through a login zsh, so it finds claude on the PATH you
+    /// use in Terminal.
+    func compact(_ conversation: Conversation) {
+        guard let cwd = conversation.cwd else { return }
+        let id = conversation.id
+        store.jobs[id] = .running
+        onMain { self.sizeMenu() }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-lc", "exec claude -p --resume \"$1\" --output-format json /compact",
+                                 "claude-cache", (id as NSString).deletingPathExtension]
+            process.currentDirectoryURL = URL(fileURLWithPath: cwd)
+            let out = Pipe(), err = Pipe()
+            process.standardOutput = out
+            process.standardError = err
+            var job = Job.failed("claude didn't start")
+            do {
+                try process.run()
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                let errors = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                process.waitUntilExit()
+                let reply = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                if process.terminationStatus == 0, reply?["is_error"] as? Bool == false {
+                    job = .done
+                } else {
+                    let message = reply?["result"] as? String
+                        ?? errors.split(separator: "\n").last.map(String.init)
+                        ?? "exit \(process.terminationStatus)"
+                    job = .failed(message)
+                }
+            } catch {}
+            onMain {
+                self.store.jobs[id] = job
+                self.scan()
+            }
+        }
+    }
 }
 

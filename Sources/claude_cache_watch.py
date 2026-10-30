@@ -120,7 +120,7 @@ def read_conversation(path):
 # mostly reminders the app injects without logging them.
 
 STATE_FILE = os.path.join(HOME, 'Library/Caches/local.claude-cache-bar/scan-state.json')
-STATE_VERSION = 7
+STATE_VERSION = 8
 AUTOCOMPACT_BUFFER = 33_000
 
 PARTS = [  # key, label: the same rows as Claude Code's Context panel
@@ -446,6 +446,9 @@ def analyze(path):
         'id': os.path.basename(path),
         'title': title,
         'project': os.path.basename(cwd) if cwd else '?',
+        'cwd': cwd,
+        # Only Claude Code's own logs can be reopened with `claude --resume`.
+        'resumable': path.startswith(os.path.join(HOME, '.claude/projects') + os.sep),
         'when': when,
         'ttl': ttl,
         'cached': usage.get('cache_read_input_tokens', 0) or 0,

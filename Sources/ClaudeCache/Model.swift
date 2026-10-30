@@ -33,6 +33,8 @@ struct Conversation: Decodable, Identifiable {
     let id: String         // log file name
     let title: String
     let project: String
+    let cwd: String?       // the folder Claude Code ran in
+    let resumable: Bool?   // a Claude Code log `claude --resume` can open (not Cowork)
     let when: Double       // unix time of the last reply
     let ttl: Double        // cache lifetime in seconds (300 or 3600)
     let cached: Int        // tokens the last reply read from the cache
@@ -161,6 +163,16 @@ final class Store: ObservableObject {
     @Published var reveal: CGFloat = 1
 
     var focus: Conversation? { conversations.first { $0.id == selected } ?? conversations.first }
+    /// Compactions started from the menu, by conversation id.
+    @Published var jobs: [String: Job] = [:]
+    /// The conversation whose Compact button was tapped once and waits for a second tap.
+    @Published var armed: (id: String, at: Date)?
+}
+
+enum Job: Equatable {
+    case running
+    case done
+    case failed(String)
 }
 
 func tokens(_ n: Int) -> String {

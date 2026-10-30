@@ -105,6 +105,7 @@ struct CacheMenu: View {
                     Card(conversation: focus, now: now, ink: ink)
                         .id(focus.id)
                         .transition(.opacity)
+                    Toolbar(store: store, conversation: focus, now: now, ink: ink)
                     if let context = focus.context {
                         ContextPanel(context: context, ink: ink, expanded: $openContext, messagesOpen: $openMessages)
                         if !context.top.isEmpty { BiggestItems(items: context.top, ink: ink, expanded: $openBiggest) }
@@ -188,6 +189,9 @@ func toggle(_ expanded: Binding<Bool>?) {
 
 /// Set by the app delegate: refits the open menu to its content.
 var resizeMenu: () -> Void = {}
+
+/// Set by the app delegate: compacts a conversation with Claude Code, in the background.
+var runCompact: (Conversation) -> Void = { _ in }
 
 /// The plan's 5-hour and weekly usage, from Anthropic (see claude_cache_watch.py).
 struct LimitsStrip: View {
@@ -505,6 +509,94 @@ struct Tip: View {
             Text(text).font(.system(size: 11.5)).foregroundStyle(ink.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+/// Actions on the inspected conversation. Compact asks Claude Code to summarise the
+/// saved conversation (`claude --resume <id> -p /compact`), so resuming it later
+/// sends the summary instead of the whole history. It costs a reply's worth of
+/// tokens, so it takes a second tap to confirm.
+struct Toolbar: View {
+    @ObservedObject var store: Store
+    let conversation: Conversation
+    let now: Date
+    let ink: Ink
+
+    var body: some View {
+        let job = store.jobs[conversation.id]
+        let armed = store.armed.map { $0.id == conversation.id && now.timeIntervalSince($0.at) < 4 } ?? false
+        let blocked = reason
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                ActionButton(icon: "arrow.down.right.and.arrow.up.left",
+                             label: job == .running ? "Compacting…" : armed ? "Tap again to compact" : "Compact",
+                             busy: job == .running, emphasis: armed,
+                             enabled: blocked == nil && job != .running, ink: ink) {
+                    if armed {
+                        store.armed = nil
+                        runCompact(conversation)
+                    } else {
+                        store.armed = (conversation.id, Date())
+                    }
+                }
+                Spacer()
+            }
+            if let note = note(job: job, armed: armed, blocked: blocked) {
+                Text(note).font(.caption).foregroundStyle(ink.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Why Compact can't run right now, if it can't.
+    var reason: String? {
+        if conversation.resumable != true || conversation.cwd == nil {
+            return "Cowork conversations can only be compacted inside Claude."
+        }
+        if now.timeIntervalSince1970 - conversation.when < 60 {
+            return "Claude replied in the last minute; compact once it's idle."
+        }
+        if (conversation.context?.used ?? 0) < 20_000 { return "Too small to be worth compacting." }
+        return nil
+    }
+
+    func note(job: Job?, armed: Bool, blocked: String?) -> String? {
+        switch job {
+        case .running: return "Claude Code is summarising the conversation. This takes up to a minute."
+        case .done: return "Compacted. Resume it (claude --resume) to carry on with the smaller context; a window still open keeps its full context."
+        case .failed(let error): return "Couldn't compact: \(error)"
+        case nil:
+            if armed { return "Uses about one reply's worth of tokens. The full history stays in the log." }
+            return blocked
+        }
+    }
+}
+
+struct ActionButton: View {
+    let icon: String
+    let label: String
+    var busy = false
+    var emphasis = false
+    var enabled = true
+    let ink: Ink
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if busy {
+                ProgressView().controlSize(.mini)
+            } else {
+                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+            }
+            Text(label).font(.system(size: 11.5, weight: .semibold))
+        }
+        .foregroundStyle(emphasis ? ink.panel : ink.primary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(emphasis ? ink.tint(.hot) : ink.surface))
+        .opacity(enabled ? 1 : 0.45)
+        .contentShape(Capsule())
+        .onTapGesture { if enabled { action() } }
     }
 }
 
