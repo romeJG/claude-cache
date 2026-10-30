@@ -118,19 +118,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func renderTitle() {
-        guard let latest = store.conversations.first else {
-            statusItem.button?.title = "🧊 –"
-            return
+        guard let button = statusItem.button else { return }
+        let status = StatusTitle(conversations: store.conversations, limits: store.limits, jobs: store.jobs, now: Date())
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let title = NSMutableAttributedString(string: status.cache, attributes: [.font: font])
+        if let limit = status.limit {
+            title.append(NSAttributedString(string: " · ", attributes: [.font: font]))
+            var attributes: [NSAttributedString.Key: Any] = [.font: font]
+            if status.alarm { attributes[.foregroundColor] = NSColor.systemRed }
+            title.append(NSAttributedString(string: limit, attributes: attributes))
         }
-        let left = latest.secondsLeft(at: Date())
-        let state = CacheState(left: left)
-        var title = left > 0 ? "\(state.emoji) \(Int(ceil(left / 60)))m" : "\(state.emoji) cold"
-        // The 5-hour session's usage, when Anthropic has told us.
-        if let session = store.limits?.windows?.first(where: { $0.key == "five_hour" }) {
-            title += " · \(Int(session.used.rounded()))%"
-        }
-        statusItem.button?.title = title
-        statusItem.button?.toolTip = "Claude prompt cache: \(latest.title)"
+        button.attributedTitle = title
+        button.appearsDisabled = status.quiet
+        button.toolTip = status.tooltip
     }
 
     @objc func refreshNow() { scan() }

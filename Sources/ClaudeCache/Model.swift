@@ -94,6 +94,55 @@ enum CacheState {
     var emoji: String { switch self { case .hot: "🔥"; case .low: "⏳"; case .cold: "🧊" } }
 }
 
+/// What the menu bar says: only what wants attention, so it can be ignored when quiet.
+///   the cache  — the warm conversation closest to going cold ("🔥 58m", "⏳ 4m"),
+///                "⟳" while one compacts, "🧊" when none is warm
+///   the limits — the fullest usage window, from 60% ("5h 72%"), alarming from 85%
+/// Nothing warm and limits fine: just a dimmed 🧊.
+struct StatusTitle {
+    var cache: String
+    var limit: String? = nil
+    var alarm = false       // the limit is nearly used up
+    var quiet = false       // nothing to act on
+    var tooltip = ""
+
+    static let limitShown = 60.0
+    static let limitAlarm = 85.0
+
+    init(conversations: [Conversation], limits: Limits?, jobs: [String: Job], now: Date) {
+        let warm = conversations
+            .map { ($0, $0.secondsLeft(at: now)) }
+            .filter { $0.1 > 0 }
+            .sorted { $0.1 < $1.1 }
+        let time = { (d: Double) in Date(timeIntervalSince1970: d).formatted(date: .omitted, time: .shortened) }
+
+        if jobs.values.contains(.running) {
+            cache = "⟳"
+        } else if let (_, left) = warm.first {
+            cache = "\(CacheState(left: left).emoji) \(Int(ceil(left / 60)))m"
+        } else {
+            cache = CacheState.cold.emoji
+        }
+
+        let fullest = (limits?.windows ?? []).max { $0.used < $1.used }
+        if let fullest, fullest.used >= Self.limitShown {
+            let name = fullest.key == "five_hour" ? "5h" : fullest.key.hasSuffix("opus") ? "Opus" : "week"
+            limit = "\(name) \(Int(fullest.used.rounded()))%"
+            alarm = fullest.used >= Self.limitAlarm
+        }
+        quiet = warm.isEmpty && limit == nil && cache == CacheState.cold.emoji
+
+        var lines = warm.map { c, left in
+            "\(CacheState(left: left).emoji) \(c.title) — warm until \(time(c.when + c.ttl))"
+        }
+        if lines.isEmpty { lines.append("No conversation's cache is warm") }
+        for w in limits?.windows ?? [] {
+            lines.append("\(w.label): \(Int(w.used.rounded()))% used" + (w.resets.map { ", resets \(time($0))" } ?? ""))
+        }
+        tooltip = lines.joined(separator: "\n")
+    }
+}
+
 /// Text and surface colours. The menu is see-through glass, and SwiftUI's
 /// .secondary/.tertiary blend with whatever is behind it, so the panel paints its
 /// own solid background and every colour here is explicit and checked against it
